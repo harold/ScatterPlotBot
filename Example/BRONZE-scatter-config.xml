@@ -1,0 +1,9 @@
+<config>
+  <attr key="dataFile" val="BRONZE-scatter.dat" />
+  <attr key="colorFile" val="greyYellowTones.color" />
+  <attr key="w" val="620" />
+  <attr key="fontName" val="Arial" />
+  <attr key="fontSize" val="9" />
+  <attr key="xAxisTicks" val="500 1000 1500 2000 2500" />
+  <attr key="yAxisTicks" val="20 40 60 80" />
+</config>
