@@ -3,11 +3,17 @@
 let mutable config = Map.empty.
                         Add("dataFile", "data.dat").
                         Add("colorFile", "").
+                        Add("plotLabel", "ScatterPlotBot FTW").
+                        Add("yAxisLabel", "").
+                        Add("xAxisLabel", "").
                         Add("w", "620").
                         Add("fontName", "Arial").
                         Add("fontSize", "10").
                         Add("xAxisTicks", "").
-                        Add("yAxisTicks", "")
+                        Add("xAxisTickNames", "").
+                        Add("yAxisTicks", "").
+                        Add("yAxisTickNames", "").
+                        Add("outFileName", "out.png")
 
 let phi = (1.0+sqrt(5.0))/2.0
 
@@ -51,13 +57,18 @@ let plot (w:int) (h:int) (minX:float) (maxX:float) (minY:float) (maxY:float) d =
     Array.iteri (fun i v -> plotPixel b i v maxV w h) a
     b
 
-let parseTicks (s:string) =
-    // TODO: Some nice way to get default values for this from min/max
+let parseTicks (s:string) min max =
     if s = "" then
-        [||]
+        [|min; max|]
     else
         let a = s.Split([|' '|])
         Array.map (fun f -> Double.Parse f) a
+
+let parseTickNames (s:string) =
+    if s = "" then
+        [||]
+    else
+        s.Split([|' '|])
 
 // Pass in a width
 let scatterPlotBot (w:int) (data:seq<float*float>) =
@@ -69,16 +80,17 @@ let scatterPlotBot (w:int) (data:seq<float*float>) =
     let backBufferGraphics = Drawing.Graphics.FromImage(backBuffer);
     backBufferGraphics.TextRenderingHint <- Drawing.Text.TextRenderingHint.AntiAliasGridFit
     // left margin is max(half the y-axis label width, largest y-tick label width, 16)
-    let yAxisLabel = "Game length"
+    let yAxisLabel = config.["yAxisLabel"]
     let yAxisLabelSize = getTextSize backBufferGraphics yAxisLabel
     let yAxisLabelWidth = yAxisLabelSize.Width
-    let yAxisTicks = parseTicks config.["yAxisTicks"]
+    let yAxisTicks = parseTicks config.["yAxisTicks"] minY maxY
+    let yAxisTickNames = parseTickNames config.["yAxisTickNames"]
     let yAxisTickPadding = 4
-    let largestYTick = Seq.maxBy (fun tick -> (getTextSize backBufferGraphics (sprintf "%g" tick)).Width + (float32 yAxisTickPadding)) yAxisTicks
-    let leftMargin = int (ceil (max (max (yAxisLabelWidth/2.0f) 16.0f) (float32 largestYTick)))
+    let yAxisTickWidths = Seq.map (fun tick -> (getTextSize backBufferGraphics (sprintf "%g" tick)).Width + (float32 yAxisTickPadding)) yAxisTicks
+    let leftMargin = int (ceil (max (max (yAxisLabelWidth/2.0f) 16.0f) (Seq.max yAxisTickWidths)))
     // 1px for y-axis
     // right margin is width of x-axis label
-    let xAxisLabel = "xp/min"
+    let xAxisLabel = config.["xAxisLabel"]
     let xAxisLabelSize = getTextSize backBufferGraphics xAxisLabel
     let xAxisLabelWidth = xAxisLabelSize.Width
     let xAxisLabelHeight = xAxisLabelSize.Height
@@ -89,12 +101,13 @@ let scatterPlotBot (w:int) (data:seq<float*float>) =
     let plotHeight = int (ceil ((float plotWidth) / phi))
     let plotBitmap = plot plotWidth plotHeight minX maxX minY maxY data
     // total height is plotLabelHeight + y-axis label height + plotHeight + 1 (for x axis) + pad? + x-tick label height
-    let plotLabel = "xp/min by game length"
+    let plotLabel = config.["plotLabel"]
     let plotLabelSize = getTextSize backBufferGraphics plotLabel
     let plotLabelWidth = plotLabelSize.Width
     let plotLabelHeight = int (ceil plotLabelSize.Height)
     let yAxisLabelHeight = int (ceil yAxisLabelSize.Height)
-    let xAxisTicks = parseTicks config.["xAxisTicks"]
+    let xAxisTicks = parseTicks config.["xAxisTicks"] minX maxX
+    let xAxisTickNames = parseTickNames config.["xAxisTickNames"]
     let xTickHeight =
         if xAxisTicks.Length = 0 then
             0
@@ -116,8 +129,8 @@ let scatterPlotBot (w:int) (data:seq<float*float>) =
     frontBufferGraphics.DrawLine(axisPen, leftMargin, y1, leftMargin, y2)
     frontBufferGraphics.DrawLine(axisPen, leftMargin, y2, leftMargin+plotWidth, y2)
     frontBufferGraphics.DrawImage(plotBitmap, leftMargin, y1)
-    Seq.iter (fun tick -> 
-        let s = sprintf "%g" tick
+    Seq.iteri (fun i tick -> 
+        let s = if yAxisTickNames.Length > i then yAxisTickNames.[i] else (sprintf "%g" tick)
         let tickSize = (getTextSize frontBufferGraphics s)
         let tickWidth = tickSize.Width
         let tickHeight = tickSize.Height
@@ -125,17 +138,17 @@ let scatterPlotBot (w:int) (data:seq<float*float>) =
         frontBufferGraphics.DrawLine(axisPen, leftMargin, y2-tickY, leftMargin+3, y2-tickY)
         frontBufferGraphics.DrawString(s, font, textBrush, float32 (leftMargin-yAxisTickPadding)-tickWidth, float32 (y2-tickY) - (tickHeight/2.0f))
     ) yAxisTicks
-    Seq.iter (fun tick -> 
-        let s = sprintf "%g" tick
+    Seq.iteri (fun i tick -> 
+        let s = if xAxisTickNames.Length > i then xAxisTickNames.[i] else (sprintf "%g" tick)
         let tickSize = (getTextSize frontBufferGraphics s)
         let tickWidth = tickSize.Width
         let tickHeight = tickSize.Height
         let tickX = int (round ((float leftMargin + float plotWidth * ((tick-minX)/(maxX-minX)))))
-        frontBufferGraphics.DrawLine(axisPen, leftMargin+tickX, y2, leftMargin+tickX, y2-3)
-        frontBufferGraphics.DrawString(s, font, textBrush, float32 (leftMargin+tickX)-(tickWidth/2.0f), float32 y2+2.0f)
+        frontBufferGraphics.DrawLine(axisPen, tickX, y2, tickX, y2-3)
+        frontBufferGraphics.DrawString(s, font, textBrush, float32 (float32 tickX-(tickWidth/2.0f)), float32 y2+2.0f)
     ) xAxisTicks
     // TODO: watermark?
-    frontBuffer.Save("out.png")
+    frontBuffer.Save(config.["outFileName"])
 
 let parseColorFile path =
     if path <> "" then
@@ -147,16 +160,19 @@ let main argv =
     match argv.Length with
     | 0 -> printfn "No config provided, using default..."
     | 1 -> printfn "Using config: %A" argv.[0]
-    | _ as x -> 
-        printfn "Exactly one command line parameter expected, %A given." x
+    | _ as n -> 
+        printfn "Exactly one command line parameter expected, %A given." n
         exit 1
-    let xml = Xml.XmlReader.Create(".\\BRONZE-scatter-config.xml")
-    while xml.Read() do
-        match xml.NodeType with
-        | Xml.XmlNodeType.Element ->
-            if xml.Name = "attr" then
-                config <- config.Add(xml.GetAttribute("key"), xml.GetAttribute("val"))
-        | _ -> ()
+
+    if argv.Length > 0 then
+        let path = argv.[0]
+        let xml = Xml.XmlReader.Create(path)
+        while xml.Read() do
+            match xml.NodeType with
+            | Xml.XmlNodeType.Element ->
+                if xml.Name = "attr" then
+                    config <- config.Add(xml.GetAttribute("key"), xml.GetAttribute("val"))
+            | _ -> ()
     printfn "%A" config
     parseColorFile config.["colorFile"]
     font <- new Drawing.Font(config.["fontName"], float32 (Double.Parse config.["fontSize"]))
